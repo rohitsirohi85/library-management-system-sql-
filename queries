@@ -1,0 +1,49 @@
+-- 6. Queries (7 Examples)
+-- ============================================
+
+-- 1) List all books with available copies
+SELECT b.book_id, b.title, i.available_copies
+FROM books b
+JOIN inventory i ON b.book_id = i.book_id;
+
+-- 2) Show all active loans (not returned)
+SELECT l.loan_id, b.title, br.name, l.issue_date, l.due_date
+FROM loans l
+JOIN books b ON l.book_id = b.book_id
+JOIN borrowers br ON l.borrower_id = br.borrower_id
+WHERE l.return_date IS NULL;
+
+-- 3) Find overdue books
+SELECT l.loan_id, b.title, br.name, l.due_date,
+       DATEDIFF(CURRENT_DATE, l.due_date) AS overdue_days
+FROM loans l
+JOIN books b ON l.book_id = b.book_id
+JOIN borrowers br ON l.borrower_id = br.borrower_id
+WHERE l.return_date IS NULL AND l.due_date < CURRENT_DATE;
+
+-- 4) Total unpaid fines per borrower
+SELECT br.name, COALESCE(SUM(f.amount),0) AS unpaid_fines
+FROM borrowers br
+LEFT JOIN loans l ON br.borrower_id = l.borrower_id
+LEFT JOIN fines f ON l.loan_id = f.loan_id AND f.paid = FALSE
+GROUP BY br.name;
+
+-- 5) Borrower loan history
+SELECT br.name, b.title, l.issue_date, l.return_date,
+       CASE WHEN l.return_date IS NULL THEN 'Not Returned' ELSE 'Returned' END AS status
+FROM borrowers br
+JOIN loans l ON br.borrower_id = l.borrower_id
+JOIN books b ON l.book_id = b.book_id;
+
+-- 6) Check available copies of a specific book
+SELECT title, available_copies
+FROM books b
+JOIN inventory i ON b.book_id = i.book_id
+WHERE b.book_id = 2;
+
+-- 7) Show all fines
+SELECT f.fine_id, br.name, b.title, f.amount, f.paid
+FROM fines f
+JOIN loans l ON f.loan_id = l.loan_id
+JOIN borrowers br ON l.borrower_id = br.borrower_id
+JOIN books b ON l.book_id = b.book_id;
