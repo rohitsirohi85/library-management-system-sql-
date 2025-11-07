@@ -1,0 +1,136 @@
+-- ============================================
+-- 0. Create and select your database (schema)
+-- ============================================
+
+CREATE DATABASE library_db;
+USE library_db;
+
+
+
+-- ============================================
+-- 1. Create tables
+-- ============================================
+
+-- Books table
+CREATE TABLE books (
+  book_id INT PRIMARY KEY,
+  title VARCHAR(150),
+  author VARCHAR(100),
+  category VARCHAR(50),
+  isbn VARCHAR(30)
+);
+
+-- Inventory table (tracks available and total copies)
+CREATE TABLE inventory (
+  inv_id INT PRIMARY KEY,
+  book_id INT,
+  total_copies INT CHECK (total_copies >= 0),
+  available_copies INT CHECK (available_copies >= 0),
+  FOREIGN KEY (book_id) REFERENCES books(book_id)
+);
+
+-- Borrowers table
+CREATE TABLE borrowers (
+  borrower_id INT PRIMARY KEY,
+  name VARCHAR(100),
+  email VARCHAR(100)
+);
+
+-- Loans table (for issuing and returning books)
+CREATE TABLE loans (
+  loan_id INT PRIMARY KEY,
+  book_id INT,
+  borrower_id INT,
+  issue_date DATE,
+  due_date DATE,
+  return_date DATE,
+  FOREIGN KEY (book_id) REFERENCES books(book_id),
+  FOREIGN KEY (borrower_id) REFERENCES borrowers(borrower_id)
+);
+
+-- Fines table
+CREATE TABLE fines (
+  fine_id INT PRIMARY KEY,
+  loan_id INT UNIQUE,
+  amount INT CHECK (amount >= 0),
+  paid BOOLEAN DEFAULT FALSE,
+  FOREIGN KEY (loan_id) REFERENCES loans(loan_id)
+);
+
+-- ============================================
+-- 3. Insert sample data
+-- ============================================
+
+-- Books
+INSERT INTO books VALUES
+(1, 'Java Programming', 'Herbert Schildt', 'Programming', '9780071808552'),
+(2, 'Database Systems', 'C. J. Date', 'Database', '9789350502678'),
+(3, 'C Programming', 'Dennis Ritchie', 'Programming', '9780131103627');
+
+-- Inventory
+INSERT INTO inventory VALUES
+(1, 1, 5, 5),
+(2, 2, 4, 4),
+(3, 3, 3, 3);
+
+-- Borrowers
+INSERT INTO borrowers VALUES
+(1, 'Rohit Sirohi', 'rohit@example.com'),
+(2, 'Anshu Verma', 'anshu@example.com');
+
+-- Loans
+INSERT INTO loans VALUES
+(1001, 1, 1, '2025-10-01', '2025-10-15', '2025-10-14'), -- returned on time
+(1002, 2, 2, '2025-10-20', '2025-11-03', NULL);         -- still borrowed
+
+-- Fines
+INSERT INTO fines VALUES
+(5001, 1001, 0, TRUE);
+
+-- ============================================
+-- 4. Transaction: Issue a book
+-- ============================================
+
+START TRANSACTION;
+
+-- Step 1: Decrease available copies
+UPDATE inventory
+SET available_copies = available_copies - 1
+WHERE book_id = 3 AND available_copies > 0;
+
+-- Step 2: Insert new loan
+INSERT INTO loans (loan_id, book_id, borrower_id, issue_date, due_date)
+VALUES (1003, 3, 1, CURRENT_DATE, DATE_ADD(CURRENT_DATE, INTERVAL 14 DAY));
+
+COMMIT;
+-- If something fails -> ROLLBACK;
+
+-- ============================================
+-- 5. Transaction: Return a book + Fine calculation
+-- ============================================
+
+START TRANSACTION;
+
+-- Step 1: Update return date
+UPDATE loans
+SET return_date = CURRENT_DATE
+WHERE loan_id = 1002 AND return_date IS NULL;
+
+-- Step 2: Increase available copies
+UPDATE inventory
+SET available_copies = available_copies + 1
+WHERE book_id = (SELECT book_id FROM loans WHERE loan_id = 1002);
+
+-- Step 3: Add fine if late (₹10 per day)
+INSERT INTO fines (fine_id, loan_id, amount, paid)
+SELECT 6001, l.loan_id,
+       GREATEST(DATEDIFF(CURRENT_DATE, l.due_date) * 10, 0),
+       FALSE
+FROM loans l
+WHERE l.loan_id = 1002
+  AND l.return_date IS NOT NULL
+  AND DATEDIFF(CURRENT_DATE, l.due_date) > 0;
+
+COMMIT;
+
+-- ============================================
